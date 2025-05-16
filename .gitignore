@@ -1,0 +1,104 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+
+# Build files
+/dist
+/build
+/out
+/.next
+/.nuxt
+/.output
+
+# Testing
+/coverage
+/.nyc_output
+/cypress/videos
+/cypress/screenshots
+/cypress/downloads
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
+._*
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs
+*.log
+
+# Vite specific
+.vite/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Tailwind
+.tailwind/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+*.cache
+
+# Local files
+.local/
+.history/
+
+# Storybook
+/storybook-static
+
+# Testing files
+/playwright-report
+/test-results
+
+# Optional: Generated files
+/generated
+
+# Optional: If using Redux
+/.redux-cache
+
+# Optional: PWA
+**/public/workbox-*.js
+**/public/sw.js
+**/public/service-worker.js
+**/public/worker-*.js
+
+# Optional: Specific to your framework
+# If using ShadCN UI
+/components/ui
