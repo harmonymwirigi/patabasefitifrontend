@@ -1,3 +1,6 @@
+// File: frontend/src/components/property/FeaturedListings.tsx
+// Status: Complete
+// Dependencies: react
 import React, { useState } from "react";
 import PropertyCard from "./PropertyCard";
 import { Button } from "@/components/ui/button";

@@ -1,7 +1,4 @@
-// File: frontend/src/pages/Properties/PropertyDetail.tsx
-// Status: COMPLETE
-// Dependencies: react, react-router-dom, api/properties
-
+// frontend/src/pages/Properties/PropertyDetail.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getProperty } from '../../api/properties';
@@ -13,6 +10,8 @@ import TokenBalance from '../../components/token/TokenBalance';
 import TokenPurchaseModal from '../../components/token/TokenPurchaseModal';
 import MessageComposer from '../../components/messages/MessageComposer';
 import { PROPERTY_TYPES, VERIFICATION_STATUSES, AVAILABILITY_STATUSES } from '../../config/constants';
+import ImageDebugger from '../../components/debug/ImageDebugger';
+import PropertyImageFix from '../../components/property/PropertyImageFix';
 
 const PropertyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,9 +24,12 @@ const PropertyDetail: React.FC = () => {
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   
+  const [imagesFixed, setImagesFixed] = useState(false);
+  const [fixedImages, setFixedImages] = useState<any[]>([]);
+  
   useEffect(() => {
     fetchPropertyDetails();
-  }, [id, token]);
+  }, [id, token, imagesFixed]);
   
   const fetchPropertyDetails = async () => {
     if (!token || !id) return;
@@ -37,6 +39,40 @@ const PropertyDetail: React.FC = () => {
     
     try {
       const data = await getProperty(token, parseInt(id));
+      console.log("Property data:", data);
+      
+      // Check if images exist in the response
+      if (!data.images || data.images.length === 0) {
+        console.warn("Property has no images in API response");
+        
+        // Try to fetch images directly from the debug endpoint
+        try {
+          const debugResponse = await fetch(`/api/debug/list-property-images/${id}`);
+          const debugData = await debugResponse.json();
+          
+          if (debugData.exists && debugData.files && debugData.files.length > 0) {
+            console.log("Found images through debug endpoint:", debugData.files);
+            
+            // Create synthetic image objects from debug data
+            const syntheticImages = debugData.files.map((file, index) => ({
+              id: index + 1,
+              property_id: parseInt(id),
+              path: `properties/${id}/${file.filename}`,
+              is_primary: index === 0,
+              uploaded_at: new Date(file.last_modified * 1000).toISOString()
+            }));
+            
+            // Add these images to the property data
+            data.images = syntheticImages;
+            console.log("Added synthetic images to property:", syntheticImages);
+          }
+        } catch (debugErr) {
+          console.error("Error fetching debug images:", debugErr);
+        }
+      } else {
+        console.log("Property images from API:", data.images);
+      }
+      
       setProperty(data);
     } catch (err: any) {
       console.error('Error fetching property details:', err);
@@ -60,6 +96,13 @@ const PropertyDetail: React.FC = () => {
       currency: 'KES',
       maximumFractionDigits: 0,
     }).format(amount);
+  };
+  
+  // Handle fixed images from PropertyImageFix component
+  const handleFixedImages = (images: any[]) => {
+    console.log("Received fixed images:", images);
+    setFixedImages(images);
+    setImagesFixed(true);
   };
   
   // Get property type label
@@ -93,6 +136,25 @@ const PropertyDetail: React.FC = () => {
     } else {
       setShowContactForm(true);
     }
+  };
+  
+  // Prepare images for gallery with proper URL handling
+  const prepareImages = () => {
+    if (!property || !property.images || property.images.length === 0) {
+      console.log("No images, using default placeholder");
+      return [];
+    }
+    
+    return property.images.map((img: any) => {
+      // Check if the path already has /uploads prefix
+      const imageUrl = img.path.startsWith('/uploads/') ? img.path : `/uploads/${img.path}`;
+      console.log(`Image path: ${img.path}, Full URL: ${imageUrl}`);
+      return {
+        id: img.id,
+        url: imageUrl,
+        is_primary: img.is_primary,
+      };
+    });
   };
   
   if (loading) {
@@ -185,11 +247,7 @@ const PropertyDetail: React.FC = () => {
         
         {/* Property Gallery */}
         <PropertyGallery
-          images={property.images?.map((img: any) => ({
-            id: img.id,
-            url: `/uploads/${img.path}`,
-            is_primary: img.is_primary,
-          })) || []}
+          images={prepareImages()}
           title={property.title}
         />
         
@@ -321,6 +379,31 @@ const PropertyDetail: React.FC = () => {
           </div>
         )}
       </div>
+      
+      {/* Image Debugging Tools - Only shown in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-6">
+          <h2 className="text-xl font-bold mb-2">Debug Tools</h2>
+          <ImageDebugger property={property} />
+          
+          {/* Add the PropertyImageFix component to fix missing images */}
+          {id && (
+            <div className="mt-4">
+              <h3 className="text-lg font-bold mb-2">Image Fix Tool</h3>
+              <PropertyImageFix 
+                propertyId={parseInt(id)} 
+                onFixedImages={handleFixedImages} 
+              />
+              
+              {imagesFixed && (
+                <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded text-green-800">
+                  Images fixed! {fixedImages.length} images retrieved from filesystem.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       
       <TokenPurchaseModal
         isOpen={showTokenModal}

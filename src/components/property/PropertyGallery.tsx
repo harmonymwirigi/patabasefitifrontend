@@ -1,8 +1,5 @@
-// File: frontend/src/components/property/PropertyGallery.tsx
-// Status: COMPLETE
-// Dependencies: react
-
-import React, { useState } from 'react';
+// frontend/src/components/property/PropertyGallery.tsx
+import React, { useState, useEffect } from 'react';
 
 interface PropertyImage {
   id: number;
@@ -20,7 +17,11 @@ const PropertyGallery: React.FC<PropertyGalleryProps> = ({ images, title }) => {
   const [showFullscreen, setShowFullscreen] = useState<boolean>(false);
   
   // Default image if none provided
-  const defaultImage = '/assets/images/property-placeholder.jpg';
+  const defaultImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzg4OCIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+  
+  useEffect(() => {
+    console.log("PropertyGallery received images:", images);
+  }, [images]);
   
   // Sort images to ensure primary image is first
   const sortedImages = [...images].sort((a, b) => {
@@ -58,6 +59,28 @@ const PropertyGallery: React.FC<PropertyGalleryProps> = ({ images, title }) => {
             src={galleryImages[activeImage]?.url}
             alt={`${title} - Image ${activeImage + 1}`}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              const img = e.currentTarget;
+              const url = img.src;
+              console.error(`Error loading image: ${url}`);
+              
+              // Try adding /uploads prefix if not already present and not a data URL
+              if (!url.startsWith('data:') && !url.startsWith('/uploads/')) {
+                const newUrl = `/uploads/${url}`;
+                console.log(`Attempting to correct URL from ${url} to ${newUrl}`);
+                img.src = newUrl;
+                
+                // Add a second error handler for the corrected URL
+                img.onerror = () => {
+                  console.error(`Still failed with corrected URL: ${newUrl}, using fallback`);
+                  img.src = defaultImage;
+                  img.onerror = null; // Prevent infinite error loops
+                };
+              } else {
+                // Use the fallback image
+                img.src = defaultImage;
+              }
+            }}
           />
           
           {/* Image navigation buttons */}
@@ -113,6 +136,27 @@ const PropertyGallery: React.FC<PropertyGalleryProps> = ({ images, title }) => {
                   src={image.url}
                   alt={`Thumbnail ${index + 1}`}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    const url = img.src;
+                    console.error(`Error loading thumbnail: ${url}`);
+                    
+                    // Try adding /uploads prefix if not already present
+                    if (!url.startsWith('data:') && !url.startsWith('/uploads/')) {
+                      const newUrl = `/uploads/${url}`;
+                      console.log(`Attempting to correct thumbnail URL from ${url} to ${newUrl}`);
+                      img.src = newUrl;
+                      
+                      // Add a second error handler for the corrected URL
+                      img.onerror = () => {
+                        console.error(`Still failed with corrected URL: ${newUrl}`);
+                        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2VlZSIvPjwvc3ZnPg==';
+                        img.onerror = null; // Prevent infinite error loops
+                      };
+                    } else {
+                      img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2VlZSIvPjwvc3ZnPg==';
+                    }
+                  }}
                 />
               </button>
             ))}
@@ -128,6 +172,27 @@ const PropertyGallery: React.FC<PropertyGalleryProps> = ({ images, title }) => {
               src={galleryImages[activeImage]?.url}
               alt={`${title} - Image ${activeImage + 1}`}
               className="max-w-full max-h-full m-auto object-contain"
+              onError={(e) => {
+                const img = e.currentTarget;
+                const url = img.src;
+                console.error(`Error loading fullscreen image: ${url}`);
+                
+                // Try adding /uploads prefix if not already present
+                if (!url.startsWith('data:') && !url.startsWith('/uploads/')) {
+                  const newUrl = `/uploads/${url}`;
+                  console.log(`Attempting to correct fullscreen URL from ${url} to ${newUrl}`);
+                  img.src = newUrl;
+                  
+                  // Add a second error handler for the corrected URL
+                  img.onerror = () => {
+                    console.error(`Still failed with corrected URL: ${newUrl}`);
+                    img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iIzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIzMiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2VlZSIgZHk9Ii4zZW0iPk5vIEltYWdlIEF2YWlsYWJsZTwvdGV4dD48L3N2Zz4=';
+                    img.onerror = null; // Prevent infinite error loops
+                  };
+                } else {
+                  img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iIzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIzMiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2VlZSIgZHk9Ii4zZW0iPk5vIEltYWdlIEF2YWlsYWJsZTwvdGV4dD48L3N2Zz4=';
+                }
+              }}
             />
             
             <button

@@ -18,7 +18,7 @@ import AuthDebug from './components/debug/AuthDebug';
 {process.env.NODE_ENV === 'development' && <AuthDebug />}
 // Pages
 import HomePage from './pages/Home';
-import PropertyListing from './pages/Properties/PropertyListing';
+import OptimizedPropertyListing from './pages/Properties/OptimizedPropertyListing';
 import PropertyDetail from './pages/Properties/PropertyDetail';
 import PropertyCreate from './pages/Properties/PropertyCreate';
 import PropertyEdit from './pages/Properties/PropertyEdit';
@@ -54,7 +54,7 @@ const App: React.FC = () => {
                 <Route path="/register" element={<Register />} />
                 
                 {/* Protected routes */}
-                <Route path="/properties" element={<PropertyListing />} />
+                <Route path="/properties" element={<OptimizedPropertyListing />} />
                 <Route path="/properties/:id" element={<PropertyDetail />} />
                 
                 <Route 

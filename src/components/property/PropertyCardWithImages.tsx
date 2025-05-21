@@ -1,6 +1,7 @@
-// frontend/src/components/property/PropertyCardFix.tsx
+// frontend/src/components/property/PropertyCardWithImages.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { usePropertyImages } from '../../hooks/usePropertyImages';
 
 interface PropertyCardProps {
   id: number;
@@ -16,7 +17,7 @@ interface PropertyCardProps {
   availability_status: string;
 }
 
-const PropertyCard: React.FC<PropertyCardProps> = ({
+const PropertyCardWithImages: React.FC<PropertyCardProps> = ({
   id,
   title,
   address,
@@ -29,9 +30,10 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
   verification_status,
   availability_status,
 }) => {
-  const [imageLoaded, setImageLoaded] = useState<boolean>(false);
-  const [imageError, setImageError] = useState<boolean>(false);
   const [finalImageUrl, setFinalImageUrl] = useState<string>('');
+  
+  // Use our custom hook to fetch images for this property
+  const { images, loading: imagesLoading } = usePropertyImages(id);
   
   // Default image if none provided
   const defaultImage = '/assets/images/property-placeholder.jpg';
@@ -45,59 +47,59 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
     }).format(amount);
   };
   
-  // Process and set the image URL
+  // Set the best available image URL
   useEffect(() => {
-    // Function to handle image URL logic
-    const processImageUrl = () => {
-      if (!image_url) {
-        console.log(`Property ${id}: No image URL provided, using default`);
-        setFinalImageUrl(defaultImage);
-        return;
-      }
-      
-      // If URL already has the /uploads/ prefix or is an absolute URL
+    // Use the provided image_url if it exists
+    if (image_url) {
       if (image_url.startsWith('/uploads/') || image_url.startsWith('http')) {
-        console.log(`Property ${id}: Using provided image URL: ${image_url}`);
         setFinalImageUrl(image_url);
       } else {
-        // Add the /uploads/ prefix
-        const correctedUrl = `/uploads/${image_url}`;
-        console.log(`Property ${id}: Corrected image URL from ${image_url} to ${correctedUrl}`);
-        setFinalImageUrl(correctedUrl);
+        setFinalImageUrl(`/uploads/${image_url}`);
       }
-    };
+      return;
+    }
     
-    processImageUrl();
-  }, [image_url, id]);
+    // Otherwise, use the first image from our fetched images
+    if (images && images.length > 0) {
+      setFinalImageUrl(images[0].url);
+      return;
+    }
+    
+    // Default placeholder if nothing else is available
+    setFinalImageUrl(defaultImage);
+  }, [image_url, images, defaultImage, id]);
   
   // Handle image loading errors
   const handleImageError = () => {
     console.error(`Error loading image for property ${id}: ${finalImageUrl}`);
-    setImageError(true);
     
-    // If the URL doesn't have /uploads/ prefix, try adding it
-    if (finalImageUrl && !finalImageUrl.startsWith('/uploads/') && !finalImageUrl.startsWith('http') && !finalImageUrl.startsWith('data:')) {
-      const correctedUrl = `/uploads/${finalImageUrl}`;
-      console.log(`Trying corrected URL: ${correctedUrl}`);
-      setFinalImageUrl(correctedUrl);
-    } else {
-      // If we've already tried with the prefix or it's a data URL, use default
-      setFinalImageUrl(defaultImage);
+    // If we have other images from the hook, try the next one
+    if (images.length > 1 && finalImageUrl === images[0].url) {
+      console.log(`Trying next image for property ${id}`);
+      setFinalImageUrl(images[1].url);
+      return;
     }
+    
+    // If all else fails, use the default image
+    setFinalImageUrl(defaultImage);
   };
   
   return (
     <Link to={`/properties/${id}`} className="block">
       <div className="bg-white rounded-lg shadow-md overflow-hidden transition-transform duration-300 hover:shadow-lg hover:-translate-y-1">
         <div className="relative h-48 overflow-hidden">
-          {/* Show either the property image or the default fallback */}
-          <img
-            src={finalImageUrl}
-            alt={title}
-            className="w-full h-full object-cover"
-            onLoad={() => setImageLoaded(true)}
-            onError={handleImageError}
-          />
+          {imagesLoading ? (
+            <div className="animate-pulse bg-gray-300 h-full w-full flex items-center justify-center">
+              <p className="text-gray-500 text-sm">Loading...</p>
+            </div>
+          ) : (
+            <img
+              src={finalImageUrl}
+              alt={title}
+              className="w-full h-full object-cover"
+              onError={handleImageError}
+            />
+          )}
           
           {verification_status === 'verified' && (
             <div className="absolute top-2 right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-md">
@@ -152,4 +154,4 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
   );
 };
 
-export default PropertyCard;
+export default PropertyCardWithImages;

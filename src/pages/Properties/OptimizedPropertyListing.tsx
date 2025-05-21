@@ -1,25 +1,30 @@
-// frontend/src/components/property/PropertyListingFix.tsx
+// frontend/src/pages/Properties/OptimizedPropertyListing.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { searchProperties, getAllProperties } from '../../api/properties';
 import { useAuth } from '../../hooks/useAuth';
-import PropertyCard from '../../components/property/PropertyCard';
+import PropertyCardWithImages from '../../components/property/PropertyCardWithImages';
 import PropertySearchFilters from '../../components/property/PropertySearchFilters';
 import { Alert } from '../../components/common/Alert';
 import TokenBalance from '../../components/token/TokenBalance';
 import TokenPurchaseModal from '../../components/token/TokenPurchaseModal';
-import { formatImageUrl } from '../../utils/imageUtils';
+import SmartPropertyImagesLoader from '../../components/property/SmartPropertyImagesLoader';
+import { getCachedImagesForProperties } from '../../utils/propertyImageCache';
 
-const PropertyListing: React.FC = () => {
+const OptimizedPropertyListing: React.FC = () => {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   
   const [properties, setProperties] = useState<any[]>([]);
+  const [propertyImagesMap, setPropertyImagesMap] = useState<Record<number, any[]>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingImages, setLoadingImages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTokenModal, setShowTokenModal] = useState(false);
-  const [imageDebugInfo, setImageDebugInfo] = useState<Record<string, any>>({});
+  
+  // Store if images have been loaded for the current set of properties
+  const [imagesLoaded, setImagesLoaded] = useState(false);
   
   // Pagination state
   const [page, setPage] = useState(1);
@@ -68,34 +73,48 @@ const PropertyListing: React.FC = () => {
     }
   }, [token, page]);
   
-  // Check image URLs and get debug info
-  const checkAndDebugImages = async (properties: any[]) => {
-    const debugInfo: Record<string, any> = {};
-    
-    for (const property of properties) {
-      // Skip properties with no images
-      if (!property.images || property.images.length === 0) continue;
+  // Effect to check cache when properties change
+  useEffect(() => {
+    if (properties.length > 0 && !imagesLoaded) {
+      // Check if we have cached images for any of the properties
+      const propertyIds = properties.map(p => p.id);
+      const cachedImages = getCachedImagesForProperties(propertyIds);
       
-      // Get image info from debug endpoint
-      try {
-        const response = await fetch(`/api/debug/list-property-images/${property.id}`);
-        const data = await response.json();
-        
-        if (data.exists) {
-          debugInfo[property.id] = {
-            propertyId: property.id,
-            imagesInDb: property.images.length,
-            imagesOnDisk: data.files?.length || 0,
-            fileDetails: data.files || []
+      if (Object.keys(cachedImages).length > 0) {
+        // Update properties with cached image information
+        updatePropertiesWithImages(cachedImages);
+      }
+      
+      // See if we need to load any remaining images
+      const uncachedPropertyIds = propertyIds.filter(id => !cachedImages[id]);
+      setLoadingImages(uncachedPropertyIds.length > 0);
+    }
+  }, [properties, imagesLoaded]);
+  
+  const handleImagesLoaded = (imagesMap: Record<number, any[]>) => {
+    setPropertyImagesMap(prevMap => ({ ...prevMap, ...imagesMap }));
+    setLoadingImages(false);
+    setImagesLoaded(true);
+    
+    // Update properties with image information
+    updatePropertiesWithImages(imagesMap);
+  };
+  
+  const updatePropertiesWithImages = (imagesMap: Record<number, any[]>) => {
+    setProperties(prevProperties => 
+      prevProperties.map(property => {
+        const images = imagesMap[property.id] || [];
+        if (images.length > 0) {
+          const primaryImage = images.find(img => img.is_primary) || images[0];
+          return {
+            ...property,
+            main_image_url: primaryImage.url,
+            has_images: true
           };
         }
-      } catch (err) {
-        console.error(`Error checking images for property ${property.id}:`, err);
-      }
-    }
-    
-    setImageDebugInfo(debugInfo);
-    return debugInfo;
+        return property;
+      })
+    );
   };
   
   const fetchProperties = async () => {
@@ -103,6 +122,7 @@ const PropertyListing: React.FC = () => {
     
     setLoading(true);
     setError(null);
+    setImagesLoaded(false);
     
     try {
       const response = await getAllProperties(token, {
@@ -110,14 +130,8 @@ const PropertyListing: React.FC = () => {
         limit: pageSize,
       });
       
-      // Process properties to ensure images have proper paths
-      const processedProperties = processPropertyImages(response);
-      setProperties(processedProperties);
-      
-      // Debug images in development mode
-      if (process.env.NODE_ENV === 'development') {
-        checkAndDebugImages(processedProperties);
-      }
+      // Set properties from API
+      setProperties(response);
       
       // TODO: Get total count for pagination from API response
       // For now, just assume there might be more pages if we got a full page
@@ -142,6 +156,7 @@ const PropertyListing: React.FC = () => {
     setError(null);
     setIsSearching(true);
     setActiveFilters(filters);
+    setImagesLoaded(false);
     
     // Update URL with search params
     const params = new URLSearchParams();
@@ -162,14 +177,8 @@ const PropertyListing: React.FC = () => {
         limit: pageSize,
       });
       
-      // Process properties to ensure images have proper paths
-      const processedProperties = processPropertyImages(response);
-      setProperties(processedProperties);
-      
-      // Debug images in development mode
-      if (process.env.NODE_ENV === 'development') {
-        checkAndDebugImages(processedProperties);
-      }
+      // Set properties from API
+      setProperties(response);
       
       // TODO: Get total count for pagination from API response
       // For now, just assume there might be more pages if we got a full page
@@ -185,42 +194,6 @@ const PropertyListing: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-  
-  // Process property images to ensure correct paths and handle missing images
-  const processPropertyImages = (properties: any[]) => {
-    return properties.map(property => {
-      // If property has no images, return as is with no image
-      if (!property.images || property.images.length === 0) {
-        console.log(`Property ${property.id} has no images`);
-        return {
-          ...property,
-          main_image_url: undefined
-        };
-      }
-      
-      // Find primary image or use first image
-      let primaryImage = property.images.find((img: any) => img.is_primary);
-      if (!primaryImage) {
-        primaryImage = property.images[0];
-      }
-      
-      // Ensure image path has correct format
-      let imagePath = primaryImage.path;
-      
-      // Log the raw path for debugging
-      console.log(`Property ${property.id} raw image path:`, imagePath);
-      
-      // Format the image URL
-      const formattedUrl = formatImageUrl(imagePath);
-      console.log(`Property ${property.id} formatted image URL:`, formattedUrl);
-      
-      // Return property with processed image URL
-      return {
-        ...property,
-        main_image_url: formattedUrl
-      };
-    });
   };
   
   const handleClearSearch = () => {
@@ -283,6 +256,16 @@ const PropertyListing: React.FC = () => {
         </div>
       )}
       
+      {/* Smart image loader that only loads uncached images */}
+      {properties.length > 0 && !imagesLoaded && (
+        <SmartPropertyImagesLoader 
+          propertyIds={properties.map(p => p.id)} 
+          onImagesLoaded={handleImagesLoaded}
+          batchSize={5}
+          showProgressBar={false} // Hide the progress bar to avoid distracting users
+        />
+      )}
+      
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, index) => (
@@ -300,7 +283,7 @@ const PropertyListing: React.FC = () => {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {properties.map((property) => (
-              <PropertyCard
+              <PropertyCardWithImages
                 key={property.id}
                 id={property.id}
                 title={property.title}
@@ -316,42 +299,6 @@ const PropertyListing: React.FC = () => {
               />
             ))}
           </div>
-          
-          {/* Image Debug Info (Development Only) */}
-          {process.env.NODE_ENV === 'development' && Object.keys(imageDebugInfo).length > 0 && (
-            <div className="mt-8 p-4 bg-gray-50 rounded-lg border">
-              <h3 className="font-bold text-lg mb-2">Image Debug Info</h3>
-              <div className="text-xs font-mono overflow-auto">
-                {Object.entries(imageDebugInfo).map(([id, info]) => (
-                  <div key={id} className="mb-2 p-2 border rounded">
-                    <p>Property ID: {id}</p>
-                    <p>Images in DB: {info.imagesInDb}</p>
-                    <p>Images on disk: {info.imagesOnDisk}</p>
-                    {info.fileDetails && info.fileDetails.length > 0 && (
-                      <div className="mt-1">
-                        <p>Files:</p>
-                        <ul className="pl-4">
-                          {info.fileDetails.map((file: any, i: number) => (
-                            <li key={i}>
-                              {file.filename} ({file.size} bytes)
-                              <a 
-                                href={file.url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="ml-2 text-blue-500 hover:underline"
-                              >
-                                View
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
           
           {/* Pagination */}
           {totalPages > 1 && (
@@ -428,4 +375,4 @@ const PropertyListing: React.FC = () => {
   );
 };
 
-export default PropertyListing;
+export default OptimizedPropertyListing;

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PropertyForm from '../../components/property/PropertyForm';
-import { createProperty } from '../../api/properties';
+import { createProperty, uploadPropertyImages } from '../../api/properties';
 import { useAuth } from '../../hooks/useAuth';
 
 const PropertyCreate: React.FC = () => {
@@ -22,16 +22,12 @@ const PropertyCreate: React.FC = () => {
     
     try {
       console.log("Submitting property data:", values);
-      
-      // Transform single_room to room if needed
-      if (values.property_type === 'single_room') {
-        values.property_type = 'room';
-      }
+      console.log("Images to upload:", images);
       
       // Make sure all required fields are valid
       const requiredFields = ['title', 'property_type', 'rent_amount', 'bedrooms', 'bathrooms', 'address', 'city'];
       for (const field of requiredFields) {
-        if (!values[field]) {
+        if (!values[field] && values[field] !== 0) {
           setError(`${field} is required`);
           setIsSubmitting(false);
           return;
@@ -40,21 +36,37 @@ const PropertyCreate: React.FC = () => {
       
       // Create property
       const property = await createProperty(token, values);
+      console.log("Property created successfully:", property);
       
-      // Handle images if needed (as a separate step)
+      // Upload images if available
       if (images.length > 0) {
         try {
-          // Upload images for the new property
-          // Note: You'll need to implement this function
-          // await uploadPropertyImages(token, property.id, images);
-        } catch (imageError) {
+          console.log(`Uploading ${images.length} images for property ID ${property.id}`);
+          
+          // Use a timeout to ensure the property is fully created in the database
+          setTimeout(async () => {
+            try {
+              const uploadedImages = await uploadPropertyImages(token, property.id, images);
+              console.log("Images uploaded successfully:", uploadedImages);
+              
+              // Navigate to property detail page after successful image upload
+              navigate(`/properties/${property.id}`);
+            } catch (uploadError: any) {
+              console.error('Error uploading images during timeout:', uploadError);
+              setError('Property created but image upload failed. You can add images later.');
+              navigate(`/properties/${property.id}`);
+            }
+          }, 1000);
+        } catch (imageError: any) {
           console.error('Error uploading images:', imageError);
-          // Continue even if image upload fails
+          setError('Property created but image upload failed. You can add images later.');
+          // Continue anyway since the property was created
+          navigate(`/properties/${property.id}`);
         }
+      } else {
+        // Navigate immediately if no images to upload
+        navigate(`/properties/${property.id}`);
       }
-      
-      // Navigate to property detail page
-      navigate(`/properties/${property.id}`);
     } catch (err: any) {
       console.error('Error creating property:', err);
       
