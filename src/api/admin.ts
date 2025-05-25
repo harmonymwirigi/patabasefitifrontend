@@ -1,4 +1,5 @@
 // frontend/src/api/admin.ts
+// Fixed version with correct parameter names
 
 import axios from 'axios';
 import { API_BASE_URL } from '../config/constants';
@@ -46,7 +47,8 @@ export const getAllUsers = async (token: string, params = {}) => {
 export const updateUserStatus = async (token: string, userId: number, status: string) => {
   const adminApi = createAdminApi(token);
   try {
-    const response = await adminApi.put(`/users/${userId}/status`, { status });
+    // Fixed: Use 'user_status' to match backend parameter name
+    const response = await adminApi.put(`/users/${userId}/status`, { user_status: status });
     console.log("API Response - updateUserStatus:", response.data);
     return response.data;
   } catch (error) {
@@ -81,21 +83,30 @@ export const getPendingVerifications = async (token: string, params = {}) => {
   }
 };
 
-// Verify a property
+// Verify a property - FIXED VERSION
 export const verifyProperty = async (token: string, propertyId: number, status: string, notes?: string) => {
   const adminApi = createAdminApi(token);
   try {
-    // Structure the payload according to the API's expectations
+    // Fixed: Use 'verification_status' to match backend parameter name
     const payload = { 
-      status,
+      verification_status: status,  // ✅ Changed from 'status' to 'verification_status'
       notes: notes || null
     };
+    
+    console.log("Sending verify property payload:", payload);
     
     const response = await adminApi.put(`/properties/${propertyId}/verify`, payload);
     console.log("API Response - verifyProperty:", response.data);
     return response.data;
   } catch (error) {
     console.error("API Error - verifyProperty:", error);
+    
+    // Log more details about the error
+    if (error.response) {
+      console.error("Error status:", error.response.status);
+      console.error("Error data:", error.response.data);
+    }
+    
     throw error;
   }
 };
@@ -104,7 +115,6 @@ export const verifyProperty = async (token: string, propertyId: number, status: 
 export const getPropertyAnalytics = async (token: string, params = {}) => {
   const adminApi = createAdminApi(token);
   try {
-    // You may need to create this endpoint in your backend
     const response = await adminApi.get('/analytics/properties', { params });
     console.log("API Response - getPropertyAnalytics:", response.data);
     return response.data;
@@ -118,7 +128,6 @@ export const getPropertyAnalytics = async (token: string, params = {}) => {
 export const getUserAnalytics = async (token: string, params = {}) => {
   const adminApi = createAdminApi(token);
   try {
-    // You may need to create this endpoint in your backend
     const response = await adminApi.get('/analytics/users', { params });
     console.log("API Response - getUserAnalytics:", response.data);
     return response.data;
@@ -132,7 +141,6 @@ export const getUserAnalytics = async (token: string, params = {}) => {
 export const getRevenueAnalytics = async (token: string, params = {}) => {
   const adminApi = createAdminApi(token);
   try {
-    // You may need to create this endpoint in your backend
     const response = await adminApi.get('/analytics/revenue', { params });
     console.log("API Response - getRevenueAnalytics:", response.data);
     return response.data;

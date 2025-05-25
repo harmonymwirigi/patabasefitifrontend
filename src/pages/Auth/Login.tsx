@@ -1,36 +1,50 @@
-// File: frontend/src/pages/Auth/Login.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import LoginForm from '../../components/auth/LoginForm';
-import GoogleAuthButton from '../../components/auth/GoogleAuthButton';
+import { useAuth } from '../../hooks/useAuth';
+import IntegratedAuthModal from '../../components/auth/IntegratedAuthModal';
 
-const Login: React.FC = () => {
+const UpdatedLogin: React.FC = () => {
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [showAuthModal, setShowAuthModal] = useState(true);
 
-  const handleSuccess = () => {
+  // Redirect if already authenticated
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+
+  const handleAuthSuccess = () => {
+    setShowAuthModal(false);
     navigate('/dashboard');
   };
 
+  const handleClose = () => {
+    setShowAuthModal(false);
+    navigate('/'); // Navigate to home or wherever you want
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Log in to your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <a href="/register" className="font-medium text-blue-600 hover:text-blue-500">
-              create a new account
-            </a>
-          </p>
-        </div>
-        
-        <LoginForm onSuccess={handleSuccess} />
-        <GoogleAuthButton onSuccess={handleSuccess} />
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <IntegratedAuthModal
+        isOpen={showAuthModal}
+        onClose={handleClose}
+        onSuccess={handleAuthSuccess}
+        defaultTab="login"
+      />
+      
+      {/* Optional: Background content */}
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          Welcome to PataBaseFiti
+        </h1>
+        <p className="text-lg text-gray-600">
+          Find your perfect property in Kenya
+        </p>
       </div>
     </div>
   );
 };
 
-export default Login;
+export default UpdatedLogin;

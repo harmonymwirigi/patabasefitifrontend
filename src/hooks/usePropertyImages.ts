@@ -1,51 +1,70 @@
-// frontend/src/hooks/usePropertyImages.ts
+// frontend/src/hooks/usePropertyImages.js
 import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { API_BASE_URL } from '../config/constants';
 
 /**
- * Custom hook to fetch property images from the debug endpoint
- * @param propertyId - The ID of the property to fetch images for
- * @returns Object containing the fetched images and loading state
+ * Custom hook to fetch and manage property images
+ * @param {number} propertyId - The ID of the property
+ * @returns {Object} - Images data and loading state
  */
-export function usePropertyImages(propertyId: number | undefined) {
-  const [images, setImages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export const usePropertyImages = (propertyId) => {
+  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!propertyId) {
-      return;
-    }
-
     const fetchImages = async () => {
+      if (!propertyId) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
       try {
-        // Try to fetch images from the debug endpoint
-        const response = await fetch(`/api/debug/list-property-images/${propertyId}`);
-        const data = await response.json();
-
-        if (data.exists && data.files && data.files.length > 0) {
-          console.log(`Found ${data.files.length} images for property ${propertyId} through debug endpoint`);
-          
-          // Create synthetic image objects from debug data
-          const syntheticImages = data.files.map((file: any, index: number) => ({
+        // First try to use the debug endpoint to get images
+        const debugResponse = await axios.get(`/api/debug/list-property-images/${propertyId}`);
+        
+        if (debugResponse.data.exists && debugResponse.data.files && debugResponse.data.files.length > 0) {
+          // Transform the debug data into our expected format
+          const imageData = debugResponse.data.files.map((file, index) => ({
             id: index + 1,
             property_id: propertyId,
-            path: `properties/${propertyId}/${file.filename}`,
-            url: `/uploads/properties/${propertyId}/${file.filename}`,
+            path: file.filename,
+            url: file.url,
             is_primary: index === 0,
             uploaded_at: new Date(file.last_modified * 1000).toISOString()
           }));
           
-          setImages(syntheticImages);
-        } else {
-          console.log(`No images found for property ${propertyId}`);
+          setImages(imageData);
+          setLoading(false);
+          return;
+        }
+        
+        // If debug endpoint doesn't have images, try the property detail endpoint
+        try {
+          const response = await axios.get(`${API_BASE_URL}/properties/${propertyId}`);
+          
+          if (response.data && response.data.images && response.data.images.length > 0) {
+            // Process image URLs to ensure they're properly formatted
+            const processedImages = response.data.images.map(img => ({
+              ...img,
+              url: processImageUrl(img.path)
+            }));
+            
+            setImages(processedImages);
+          } else {
+            setImages([]);
+          }
+        } catch (error) {
+          console.error(`Error fetching property details for images: ${error}`);
           setImages([]);
         }
       } catch (err) {
-        console.error(`Error fetching images for property ${propertyId}:`, err);
-        setError(`Failed to fetch images: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`Error fetching property images: ${err}`);
+        setError(err.message || 'Failed to load images');
         setImages([]);
       } finally {
         setLoading(false);
@@ -55,5 +74,20 @@ export function usePropertyImages(propertyId: number | undefined) {
     fetchImages();
   }, [propertyId]);
 
+  // Helper function to process image URLs
+  const processImageUrl = (path) => {
+    if (!path) return '';
+    
+    // If already has uploads prefix or is an absolute URL
+    if (path.startsWith('/uploads/') || path.startsWith('http')) {
+      return path;
+    }
+    
+    // Add uploads prefix
+    return `/uploads/${path}`;
+  };
+
   return { images, loading, error };
-}
+};
+
+export default usePropertyImages;

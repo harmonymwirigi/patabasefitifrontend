@@ -1,20 +1,20 @@
-// File: frontend/src/pages/Dashboard/OwnerDashboard.tsx
+// frontend/src/pages/Dashboard/OwnerDashboard.jsx (Updated)
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getAllProperties } from '../../api/properties';
 import { getPendingVerifications } from '../../api/verifications';
 import { useAuth } from '../../hooks/useAuth';
-import PropertyCard from '../../components/property/PropertyCard';
+import ImprovedPropertyCard from '../../components/property/ImprovedPropertyCard';
 import VerificationPrompt from '../../components/property/VerificationPrompt';
 
-const OwnerDashboard: React.FC = () => {
+const OwnerDashboard = () => {
   const { token, user } = useAuth();
   
-  const [properties, setProperties] = useState<any[]>([]);
-  const [pendingVerifications, setPendingVerifications] = useState<any[]>([]);
+  const [properties, setProperties] = useState([]);
+  const [pendingVerifications, setPendingVerifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [activeVerification, setActiveVerification] = useState<number | null>(null);
+  const [error, setError] = useState(null);
+  const [activeVerification, setActiveVerification] = useState(null);
 
   useEffect(() => {
     if (token) {
@@ -28,9 +28,12 @@ const OwnerDashboard: React.FC = () => {
     
     try {
       const [propertiesData, verificationsData] = await Promise.all([
-        getAllProperties(token!, { owner_id: user?.id }),
-        getPendingVerifications(token!)
+        getAllProperties(token, { owner_id: user?.id }),
+        getPendingVerifications(token)
       ]);
+      
+      console.log('Properties data:', propertiesData);
+      console.log('Verifications data:', verificationsData);
       
       setProperties(propertiesData);
       setPendingVerifications(verificationsData);
@@ -138,7 +141,7 @@ const OwnerDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {properties.map(property => (
             <div key={property.id} className="relative">
-              <PropertyCard
+              <ImprovedPropertyCard
                 id={property.id}
                 title={property.title}
                 address={property.address}
@@ -147,7 +150,10 @@ const OwnerDashboard: React.FC = () => {
                 bedrooms={property.bedrooms}
                 bathrooms={property.bathrooms}
                 property_type={property.property_type}
-                image_url={property.images && property.images.length > 0 ? `/uploads/${property.images[0].path}` : undefined}
+                // Improved image URL handling
+                image_url={property.images && property.images.length > 0 
+                  ? property.images[0].path 
+                  : property.main_image || undefined}
                 verification_status={property.verification_status}
                 availability_status={property.availability_status}
               />

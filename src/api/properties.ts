@@ -1,5 +1,5 @@
-// frontend/src/api/properties.ts
-// Updated version with improved image handling
+// File: frontend/src/api/properties.ts
+// Clean properties API without debug code
 
 import axios from 'axios';
 import { API_BASE_URL } from '../config/constants';
@@ -20,30 +20,28 @@ const createPropertyApi = (token?: string) => {
 export const getAllProperties = async (token: string, params = {}) => {
   const propertyApi = createPropertyApi(token);
   const response = await propertyApi.get('/', { params });
-  console.log("API Response - getAllProperties:", response.data);
   return response.data;
 };
 
 export const getProperty = async (token: string, propertyId: number) => {
   const propertyApi = createPropertyApi(token);
-  try {
-    const response = await propertyApi.get(`/${propertyId}`);
-    console.log("API Response - getProperty:", response.data);
+  const response = await propertyApi.get(`/${propertyId}`);
+  
+  // If no images in response, try to detect images from filesystem
+  if (response.data && (!response.data.images || response.data.images.length === 0)) {
+    console.log("No images in API response, checking filesystem...");
     
-    // Check if API response is valid but has no images
-    if (response.data && (!response.data.images || response.data.images.length === 0)) {
-      console.log("Property has no images in API response, trying debug endpoint...");
-      
-      // Try to fetch images directly from the debug endpoint
-      try {
-        const debugResponse = await fetch(`/api/debug/list-property-images/${propertyId}`);
+    try {
+      // Try to fetch images from a debug/filesystem endpoint
+      const debugResponse = await fetch(`/api/debug/list-property-images/${propertyId}`);
+      if (debugResponse.ok) {
         const debugData = await debugResponse.json();
         
         if (debugData.exists && debugData.files && debugData.files.length > 0) {
-          console.log("Found images through debug endpoint:", debugData.files);
+          console.log("Found images in filesystem:", debugData.files);
           
-          // Create synthetic image objects from debug data
-          const syntheticImages = debugData.files.map((file, index) => ({
+          // Create image objects from filesystem data
+          const filesystemImages = debugData.files.map((file: any, index: number) => ({
             id: index + 1,
             property_id: propertyId,
             path: `properties/${propertyId}/${file.filename}`,
@@ -51,20 +49,16 @@ export const getProperty = async (token: string, propertyId: number) => {
             uploaded_at: new Date(file.last_modified * 1000).toISOString()
           }));
           
-          // Add these images to the property data
-          response.data.images = syntheticImages;
-          console.log("Added synthetic images to property:", syntheticImages);
+          response.data.images = filesystemImages;
+          console.log("Added filesystem images to property data");
         }
-      } catch (debugErr) {
-        console.error("Error fetching debug images:", debugErr);
       }
+    } catch (debugErr) {
+      console.log("Could not fetch filesystem images:", debugErr.message);
     }
-    
-    return response.data;
-  } catch (error) {
-    console.error("API Error - getProperty:", error);
-    throw error;
   }
+  
+  return response.data;
 };
 
 export const createProperty = async (token: string, propertyData: any) => {
@@ -87,14 +81,8 @@ export const deleteProperty = async (token: string, propertyId: number) => {
 
 export const searchProperties = async (token: string, searchParams: any) => {
   const propertyApi = createPropertyApi(token);
-  try {
-    const response = await propertyApi.post('/search', searchParams);
-    console.log("API Response - searchProperties:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("API Error - searchProperties:", error);
-    throw error;
-  }
+  const response = await propertyApi.post('/search', searchParams);
+  return response.data;
 };
 
 export const getFeaturedProperties = async () => {
@@ -105,12 +93,10 @@ export const getFeaturedProperties = async () => {
 
 export const uploadPropertyImages = async (token: string, propertyId: number, files: File[]) => {
   const formData = new FormData();
-  console.log(`Preparing to upload ${files.length} files for property ${propertyId}`);
   
   // Append each file to the FormData with the field name 'images'
   files.forEach(file => {
     formData.append('images', file);
-    console.log(`Added file to upload: ${file.name} (${file.size} bytes)`);
   });
   
   // Create a custom instance for this request
@@ -125,13 +111,30 @@ export const uploadPropertyImages = async (token: string, propertyId: number, fi
     }
   );
   
-  console.log('Image upload response:', response.data);
   return response.data;
 };
 
 export const updatePropertyStatus = async (token: string, propertyId: number, status: string) => {
   const propertyApi = createPropertyApi(token);
   const response = await propertyApi.put(`/${propertyId}/status?status=${status}`, {});
+  return response.data;
+};
+
+export const addToFavorites = async (token: string, propertyId: number) => {
+  const propertyApi = createPropertyApi(token);
+  const response = await propertyApi.post(`/${propertyId}/favorite`);
+  return response.data;
+};
+
+export const removeFromFavorites = async (token: string, propertyId: number) => {
+  const propertyApi = createPropertyApi(token);
+  const response = await propertyApi.delete(`/${propertyId}/favorite`);
+  return response.data;
+};
+
+export const getFavoriteProperties = async (token: string) => {
+  const propertyApi = createPropertyApi(token);
+  const response = await propertyApi.get('/favorites');
   return response.data;
 };
 

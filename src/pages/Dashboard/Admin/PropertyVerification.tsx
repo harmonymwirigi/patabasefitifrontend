@@ -1,4 +1,6 @@
 // frontend/src/pages/Dashboard/Admin/PropertyVerification.tsx
+// Fixed version with working filters
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { getPendingVerifications, verifyProperty } from '../../../api/admin';
@@ -57,14 +59,25 @@ const PropertyVerificationPage: React.FC = () => {
     setError(null);
     
     try {
-      console.log("Fetching verification data...");
-      const data = await getPendingVerifications(token, { status: filter !== 'all' ? filter : undefined });
-      console.log("Verification data:", data);
+      console.log(`Fetching verification data with filter: ${filter}`);
+      
+      // Build the parameters object correctly
+      const params: any = {};
+      
+      // Only add verification_status if filter is not 'all'
+      if (filter !== 'all') {
+        params.verification_status = filter;
+      }
+      
+      console.log('API call parameters:', params);
+      
+      const data = await getPendingVerifications(token, params);
+      console.log("Verification data received:", data);
       setVerifications(data);
-      setLoading(false);
     } catch (err: any) {
       console.error('Error fetching verifications:', err);
       setError(err.response?.data?.detail || 'Failed to load properties for verification');
+    } finally {
       setLoading(false);
     }
   };
@@ -73,6 +86,7 @@ const PropertyVerificationPage: React.FC = () => {
     setActionLoading(true);
     
     try {
+      console.log(`Verifying property ${propertyId} with status: ${status}`);
       await verifyProperty(token, propertyId, status, note);
       
       // Update the local state to reflect the change
@@ -85,9 +99,10 @@ const PropertyVerificationPage: React.FC = () => {
       setRejectionNote('');
       setShowRejectionNoteModal(false);
       
-      // Refresh the list
+      // Refresh the list to get updated data from server
       fetchVerifications();
     } catch (err: any) {
+      console.error('Error verifying property:', err);
       setError(err.response?.data?.detail || 'Failed to update property status');
     } finally {
       setActionLoading(false);
@@ -121,6 +136,13 @@ const PropertyVerificationPage: React.FC = () => {
     return '/api/placeholder/400/300';
   };
 
+  // Function to handle filter change with immediate feedback
+  const handleFilterChange = (newFilter: 'all' | 'pending' | 'verified' | 'rejected') => {
+    console.log(`Changing filter from ${filter} to ${newFilter}`);
+    setFilter(newFilter);
+    setError(null); // Clear any existing errors
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -131,14 +153,16 @@ const PropertyVerificationPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-4">
-        <p>{error}</p>
-        <button 
-          onClick={fetchVerifications}
-          className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-        >
-          Retry
-        </button>
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-4">
+          <p>{error}</p>
+          <button 
+            onClick={fetchVerifications}
+            className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -146,22 +170,27 @@ const PropertyVerificationPage: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Property Verification</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Property Verification</h1>
+          <p className="text-gray-600 mt-1">
+            Showing {verifications.length} {filter === 'all' ? 'total' : filter} properties
+          </p>
+        </div>
         
         <div className="flex space-x-2">
           <button 
-            onClick={() => setFilter('all')}
-            className={`px-3 py-1 rounded text-sm ${
+            onClick={() => handleFilterChange('all')}
+            className={`px-3 py-1 rounded text-sm transition-colors ${
               filter === 'all' 
                 ? 'bg-blue-600 text-white' 
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            All
+            All ({verifications.length})
           </button>
           <button 
-            onClick={() => setFilter('pending')}
-            className={`px-3 py-1 rounded text-sm ${
+            onClick={() => handleFilterChange('pending')}
+            className={`px-3 py-1 rounded text-sm transition-colors ${
               filter === 'pending' 
                 ? 'bg-yellow-600 text-white' 
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -170,8 +199,8 @@ const PropertyVerificationPage: React.FC = () => {
             Pending
           </button>
           <button 
-            onClick={() => setFilter('verified')}
-            className={`px-3 py-1 rounded text-sm ${
+            onClick={() => handleFilterChange('verified')}
+            className={`px-3 py-1 rounded text-sm transition-colors ${
               filter === 'verified' 
                 ? 'bg-green-600 text-white' 
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -180,8 +209,8 @@ const PropertyVerificationPage: React.FC = () => {
             Verified
           </button>
           <button 
-            onClick={() => setFilter('rejected')}
-            className={`px-3 py-1 rounded text-sm ${
+            onClick={() => handleFilterChange('rejected')}
+            className={`px-3 py-1 rounded text-sm transition-colors ${
               filter === 'rejected' 
                 ? 'bg-red-600 text-white' 
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -190,6 +219,21 @@ const PropertyVerificationPage: React.FC = () => {
             Rejected
           </button>
         </div>
+      </div>
+      
+      {/* Show current filter status */}
+      <div className="mb-4 flex items-center justify-between bg-blue-50 p-3 rounded-md">
+        <div className="text-blue-700">
+          <span className="font-medium">Filter:</span> {filter === 'all' ? 'All properties' : `${filter.charAt(0).toUpperCase() + filter.slice(1)} properties`}
+        </div>
+        {filter !== 'pending' && (
+          <button
+            onClick={() => handleFilterChange('pending')}
+            className="text-blue-600 hover:text-blue-800 font-medium text-sm focus:outline-none"
+          >
+            Reset to Pending
+          </button>
+        )}
       </div>
       
       <div className="bg-white shadow-md rounded-lg overflow-hidden">
@@ -217,7 +261,10 @@ const PropertyVerificationPage: React.FC = () => {
             {verifications.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                  No properties found with the selected filter.
+                  {filter === 'all' 
+                    ? 'No properties found in the system.' 
+                    : `No properties found with status: ${filter}.`
+                  }
                 </td>
               </tr>
             ) : (
@@ -284,15 +331,17 @@ const PropertyVerificationPage: React.FC = () => {
                       <>
                         <button
                           onClick={() => handleVerify(verification.id, verification.property_id, 'verified')}
-                          className="text-green-600 hover:text-green-900 mr-2"
+                          disabled={actionLoading}
+                          className="text-green-600 hover:text-green-900 mr-2 disabled:opacity-50"
                         >
-                          Approve
+                          {actionLoading ? 'Processing...' : 'Approve'}
                         </button>
                         <button
                           onClick={() => handleRejectClick(verification)}
-                          className="text-red-600 hover:text-red-900"
+                          disabled={actionLoading}
+                          className="text-red-600 hover:text-red-900 disabled:opacity-50"
                         >
-                          Reject
+                          {actionLoading ? 'Processing...' : 'Reject'}
                         </button>
                       </>
                     )}
@@ -392,7 +441,7 @@ const PropertyVerificationPage: React.FC = () => {
                       type="button"
                       disabled={actionLoading}
                       onClick={() => handleVerify(selectedVerification.id, selectedVerification.property_id, 'verified')}
-                      className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm"
+                      className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                     >
                       {actionLoading ? 'Processing...' : 'Approve'}
                     </button>
@@ -400,7 +449,7 @@ const PropertyVerificationPage: React.FC = () => {
                       type="button"
                       disabled={actionLoading}
                       onClick={() => handleRejectClick(selectedVerification)}
-                      className="mt-3 w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                      className="mt-3 w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                     >
                       {actionLoading ? 'Processing...' : 'Reject'}
                     </button>
@@ -461,7 +510,7 @@ const PropertyVerificationPage: React.FC = () => {
                   type="button"
                   disabled={actionLoading}
                   onClick={submitRejection}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                 >
                   {actionLoading ? 'Processing...' : 'Reject Property'}
                 </button>

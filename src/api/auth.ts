@@ -1,5 +1,5 @@
 // File: frontend/src/api/auth.ts
-// Updated to handle the correct response structure
+// Updated to handle role selection for Google auth
 
 import axios from 'axios';
 import { AUTH_ENDPOINTS } from '../config/endpoints';
@@ -15,6 +15,20 @@ interface RegisterData {
   full_name: string;
   role: string;
   phone_number?: string;
+}
+
+interface GoogleUserInfo {
+  email: string;
+  name: string;
+  picture?: string;
+  google_id: string;
+}
+
+interface GoogleVerifyResponse {
+  user_exists: boolean;
+  user_info: GoogleUserInfo;
+  needs_role_selection?: boolean;
+  user_data?: any;
 }
 
 // For login form
@@ -123,7 +137,42 @@ export const register = async (userData: RegisterData): Promise<string> => {
   }
 };
 
+// New function to verify Google token and check if user exists
+export const verifyGoogleToken = async (token: string): Promise<GoogleVerifyResponse> => {
+  console.log('🔍 verifyGoogleToken request');
+  try {
+    const response = await axios.post(AUTH_ENDPOINTS.GOOGLE_VERIFY, { token });
+    console.log('✅ verifyGoogleToken response structure:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ verifyGoogleToken error:', error);
+    throw error;
+  }
+};
 
+// New function to complete Google auth with role selection
+export const completeGoogleAuth = async (token: string, role: 'tenant' | 'owner') => {
+  console.log('🔍 completeGoogleAuth request with role:', role);
+  try {
+    const response = await axios.post(AUTH_ENDPOINTS.GOOGLE_COMPLETE, { 
+      token, 
+      role 
+    });
+    console.log('✅ completeGoogleAuth response structure:', response.data);
+    
+    // Extract token based on response structure
+    if (response.data.access_token) {
+      return response.data.access_token;
+    } else {
+      throw new Error('Invalid token structure in response');
+    }
+  } catch (error) {
+    console.error('❌ completeGoogleAuth error:', error);
+    throw error;
+  }
+};
+
+// Legacy Google auth function (for existing users)
 export const googleAuth = async (token: string) => {
   console.log('🔍 googleAuth request with token');
   try {
