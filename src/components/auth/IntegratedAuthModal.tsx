@@ -1,5 +1,5 @@
 // File: frontend/src/components/auth/IntegratedAuthModal.tsx
-// Complete auth modal with Google role selection integration
+// Fixed Google authentication flow
 
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Mail, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
-import { login, register, verifyGoogleToken, completeGoogleAuth, googleAuth } from "../../api/auth";
+import { login, register, verifyGoogleToken, completeGoogleAuth } from "../../api/auth";
 import { GoogleLogin } from '@react-oauth/google';
 import RoleSelectionModal from './RoleSelectionModal';
 
@@ -125,7 +125,7 @@ const IntegratedAuthModal: React.FC<IntegratedAuthModalProps> = ({
     }
   };
 
-  // Google authentication handlers
+  // Fixed Google authentication handlers
   const handleGoogleSuccess = async (response: any) => {
     if (!response.credential) {
       setError('Google authentication failed: No credential returned');
@@ -136,12 +136,23 @@ const IntegratedAuthModal: React.FC<IntegratedAuthModalProps> = ({
     setError(null);
     
     try {
+      console.log('🔍 Starting Google auth verification...');
+      
       // First, verify the token and check if user exists
       const verifyResponse = await verifyGoogleToken(response.credential);
+      console.log('✅ Verify response:', verifyResponse);
       
       if (verifyResponse.user_exists) {
-        // User exists, proceed with direct login
-        const accessToken = await googleAuth(response.credential);
+        // Existing user - use the complete endpoint with existing user's role
+        console.log('🔍 Existing user found, completing auth with existing role...');
+        
+        // Use the existing user's role from the verification response
+        const existingUserRole = verifyResponse.user_data?.role;
+        if (!existingUserRole) {
+          throw new Error('User role not found in verification response');
+        }
+        
+        const accessToken = await completeGoogleAuth(response.credential, existingUserRole);
         
         if (accessToken) {
           await authLogin(accessToken);
@@ -151,13 +162,14 @@ const IntegratedAuthModal: React.FC<IntegratedAuthModalProps> = ({
           setError('Login failed: No access token received');
         }
       } else {
-        // New user, show role selection modal
+        // New user - show role selection modal
+        console.log('🔍 New user detected, showing role selection...');
         setPendingToken(response.credential);
         setUserInfo(verifyResponse.user_info);
         setShowRoleModal(true);
       }
     } catch (err: any) {
-      console.error('Google auth error:', err);
+      console.error('❌ Google auth error:', err);
       setError(err.response?.data?.detail || 'Google authentication failed. Please try again.');
     } finally {
       setGoogleLoading(false);
@@ -173,6 +185,7 @@ const IntegratedAuthModal: React.FC<IntegratedAuthModalProps> = ({
     setGoogleLoading(true);
 
     try {
+      console.log('🔍 Completing Google auth with selected role:', role);
       const accessToken = await completeGoogleAuth(pendingToken, role);
       
       if (accessToken) {
@@ -186,7 +199,7 @@ const IntegratedAuthModal: React.FC<IntegratedAuthModalProps> = ({
         setError('Registration failed: No access token received from server');
       }
     } catch (err: any) {
-      console.error('Role selection completion error:', err);
+      console.error('❌ Role selection completion error:', err);
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {
       setGoogleLoading(false);

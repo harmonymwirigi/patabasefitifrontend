@@ -1,138 +1,191 @@
-// File: frontend/src/pages/Messages/Inbox.tsx
+// frontend/src/pages/Messages/Inbox.tsx
+// Main inbox page showing conversation list and message interface
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { getConversations } from '../../api/messages';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { getConversations, createConversation } from '../../api/messages';
+import ConversationList from '../../components/messages/ConversationList';
+import MessageThread from '../../components/messages/MessageThread';
+import NewMessageModal from '../../components/messages/NewMessageModal';
+
+interface Conversation {
+  id: string;
+  participants: Array<{
+    id: number;
+    full_name: string;
+    profile_image?: string;
+  }>;
+  property?: {
+    id: number;
+    title: string;
+  };
+  last_message?: {
+    id: number;
+    content: string;
+    sender_id: number;
+    created_at: string;
+    is_read: boolean;
+  };
+  unread_count: number;
+  updated_at: string;
+}
 
 const Inbox: React.FC = () => {
   const { token, user } = useAuth();
-  const [conversations, setConversations] = useState<any[]>([]);
+  const navigate = useNavigate();
+  
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showNewMessage, setShowNewMessage] = useState(false);
 
   useEffect(() => {
-    fetchConversations();
+    if (token) {
+      fetchConversations();
+    }
   }, [token]);
 
   const fetchConversations = async () => {
-    if (!token) return;
-    
-    setLoading(true);
-    setError(null);
-    
     try {
-      const data = await getConversations(token);
+      setLoading(true);
+      const data = await getConversations(token!);
       setConversations(data);
-    } catch (err) {
+      
+      // Auto-select first conversation on desktop
+      if (data.length > 0 && window.innerWidth >= 768) {
+        setSelectedConversation(data[0].id);
+      }
+    } catch (err: any) {
       console.error('Error fetching conversations:', err);
-      setError('Failed to load messages');
+      setError('Failed to load conversations');
     } finally {
       setLoading(false);
     }
   };
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(date);
+  const handleConversationSelect = (conversationId: string) => {
+    setSelectedConversation(conversationId);
+    
+    // On mobile, navigate to conversation page
+    if (window.innerWidth < 768) {
+      navigate(`/messages/${conversationId}`);
+    }
   };
 
+  const handleNewConversation = async (receiverId: number, propertyId?: number) => {
+    try {
+      const conversation = await createConversation(token!, receiverId, propertyId);
+      await fetchConversations();
+      setSelectedConversation(conversation.id);
+      setShowNewMessage(false);
+    } catch (err: any) {
+      console.error('Error creating conversation:', err);
+      alert('Failed to start conversation. Please try again.');
+    }
+  };
+
+  const selectedConversationData = conversations.find(c => c.id === selectedConversation);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Messages</h1>
-      
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    <div className="h-screen flex bg-gray-50">
+      {/* Sidebar - Conversation List */}
+      <div className={`bg-white border-r border-gray-200 ${
+        selectedConversation ? 'hidden md:block' : 'block'
+      } md:w-1/3 lg:w-1/4 xl:w-1/3 w-full`}>
+        {/* Header */}
+        <div className="border-b border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
+            <button
+              onClick={() => setShowNewMessage(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 transition-colors"
+              title="New Message"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
         </div>
-      ) : error ? (
-        <div className="text-center py-12">
-          <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={fetchConversations}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Retry
-          </button>
+
+        {/* Conversation List */}
+        <div className="flex-1 overflow-y-auto">
+          {error ? (
+            <div className="p-4 text-center">
+              <div className="text-red-600 mb-2">{error}</div>
+              <button
+                onClick={fetchConversations}
+                className="text-blue-600 hover:text-blue-800 text-sm"
+              >
+                Try Again
+              </button>
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="p-6 text-center">
+              <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
+              <p className="text-gray-600 mb-4">Start a conversation by contacting a property owner or tenant.</p>
+              <button
+                onClick={() => setShowNewMessage(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+              >
+                Start New Conversation
+              </button>
+            </div>
+          ) : (
+            <ConversationList
+              conversations={conversations}
+              selectedConversation={selectedConversation}
+              onConversationSelect={handleConversationSelect}
+              currentUserId={user?.id}
+            />
+          )}
         </div>
-      ) : conversations.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-          <h3 className="mt-4 text-xl font-medium text-gray-900">No messages yet</h3>
-          <p className="mt-2 text-gray-600 max-w-md mx-auto">
-            When you contact property owners or receive messages, they will appear here.
-          </p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <ul className="divide-y divide-gray-200">
-            {conversations.map((conversation) => (
-              <li key={conversation.id}>
-                <Link
-                  to={`/messages/${conversation.id}`}
-                  className={`block px-6 py-4 hover:bg-gray-50 ${
-                    !conversation.is_read && conversation.last_sender_id !== user?.id
-                      ? 'bg-blue-50'
-                      : ''
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      {conversation.other_user.profile_image ? (
-                        <img
-                          src={`/uploads/${conversation.other_user.profile_image}`}
-                          alt={conversation.other_user.full_name}
-                          className="h-10 w-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-full bg-blue-200 flex items-center justify-center">
-                          <span className="text-blue-600 font-medium">
-                            {conversation.other_user.full_name.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                      )}
-                      
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-gray-900">
-                          {conversation.other_user.full_name}
-                        </p>
-                        
-                        {conversation.property && (
-                          <p className="text-xs text-gray-500">
-                            Re: {conversation.property.title}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col items-end">
-                      <span className="text-xs text-gray-500">
-                        {formatDate(conversation.last_message_date)}
-                      </span>
-                      
-                      {!conversation.is_read && conversation.last_sender_id !== user?.id && (
-                        <span className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          New
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <p className="mt-2 text-sm text-gray-600 truncate">
-                    {conversation.last_message}
-                  </p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      </div>
+
+      {/* Main Content - Message Thread */}
+      <div className={`flex-1 flex flex-col ${
+        selectedConversation ? 'block' : 'hidden md:flex'
+      }`}>
+        {selectedConversation && selectedConversationData ? (
+          <MessageThread
+            conversationId={selectedConversation}
+            conversation={selectedConversationData}
+            onBack={() => setSelectedConversation(null)}
+            onConversationUpdate={fetchConversations}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <svg className="w-24 h-24 mx-auto text-gray-300 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <h3 className="text-xl font-medium text-gray-900 mb-2">Welcome to Messages</h3>
+              <p className="text-gray-600 max-w-sm mx-auto">
+                Select a conversation from the sidebar to start chatting, or create a new conversation.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* New Message Modal */}
+      <NewMessageModal
+        isOpen={showNewMessage}
+        onClose={() => setShowNewMessage(false)}
+        onCreateConversation={handleNewConversation}
+      />
     </div>
   );
 };

@@ -1,132 +1,137 @@
-// File: frontend/src/components/messages/MessageComposer.tsx
-// Status: COMPLETE
-// Dependencies: react, formik, yup, api/messages
-
-import React, { useState } from 'react';
-import { Formik, Form, Field, ErrorMessage } from 'formik';
-import * as Yup from 'yup';
-import { sendMessage } from '../../api/messages';
-import { useAuth } from '../../hooks/useAuth';
-import { Alert } from '../common/Alert';
+// frontend/src/components/messages/MessageComposer.tsx
+// Component for composing and sending messages
+import React, { useState, useRef, useEffect } from 'react';
 
 interface MessageComposerProps {
-  receiverId: number;
-  propertyId?: number;
-  conversationId?: string;
-  onSuccess?: () => void;
-  onCancel?: () => void;
+  onSendMessage: (content: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
 }
 
 const MessageComposer: React.FC<MessageComposerProps> = ({
-  receiverId,
-  propertyId,
-  conversationId,
-  onSuccess,
-  onCancel,
+  onSendMessage,
+  disabled = false,
+  placeholder = "Type a message..."
 }) => {
-  const { token } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Validation schema
-  const MessageSchema = Yup.object().shape({
-    message: Yup.string()
-      .min(2, 'Message is too short')
-      .max(1000, 'Message is too long')
-      .required('Message is required'),
-  });
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [message]);
 
-  const handleSubmit = async (values: { message: string }, { resetForm }: any) => {
-    if (!token) return;
-    
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-    
-    try {
-      await sendMessage(token, {
-        receiver_id: receiverId,
-        property_id: propertyId,
-        conversation_id: conversationId,
-        content: values.message,
-      });
-      
-      setSuccess('Message sent successfully!');
-      resetForm();
-      
-      if (onSuccess) {
-        setTimeout(() => {
-          onSuccess();
-        }, 1500);
-      }
-    } catch (err: any) {
-      console.error('Error sending message:', err);
-      
-      if (err.response && err.response.status === 402) {
-        setError('You need tokens to contact property owners. Please purchase tokens to continue.');
-      } else if (err.response && err.response.data && err.response.data.detail) {
-        setError(err.response.data.detail);
-      } else {
-        setError('Failed to send message. Please try again.');
-      }
-    } finally {
-      setLoading(false);
+  const adjustTextareaHeight = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      const newHeight = Math.min(textarea.scrollHeight, 120); // Max height of ~6 lines
+      textarea.style.height = `${newHeight}px`;
     }
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage();
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const sendMessage = () => {
+    const trimmedMessage = message.trim();
+    if (trimmedMessage && !disabled) {
+      onSendMessage(trimmedMessage);
+      setMessage('');
+      setIsTyping(false);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setMessage(value);
+    setIsTyping(value.length > 0);
+  };
+
   return (
-    <div>
-      {error && <Alert type="error" message={error} className="mb-4" />}
-      {success && <Alert type="success" message={success} className="mb-4" />}
-      
-      <Formik
-        initialValues={{ message: '' }}
-        validationSchema={MessageSchema}
-        onSubmit={handleSubmit}
-      >
-        {({ isSubmitting }) => (
-          <Form className="space-y-4">
-            <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">
-                Your Message
-              </label>
-              <Field
-                as="textarea"
-                id="message"
-                name="message"
-                rows={4}
-                placeholder="Write your message here..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <ErrorMessage name="message" component="div" className="mt-1 text-sm text-red-600" />
-              <p className="mt-1 text-xs text-gray-500">
-                This will cost 2 tokens from your balance.
-              </p>
-            </div>
-            
-            <div className="flex space-x-3 justify-end">
-              {onCancel && (
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Cancel
-                </button>
-              )}
-              
-              <button
-                type="submit"
-                disabled={isSubmitting || loading}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                {loading ? 'Sending...' : 'Send Message'}
-              </button>
-            </div>
-          </Form>
-        )}
-      </Formik>
+    <div className="p-4">
+      <form onSubmit={handleSubmit} className="flex items-end space-x-2">
+        {/* Message Input */}
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={message}
+            onChange={handleInputChange}
+            onKeyPress={handleKeyPress}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+            className={`w-full resize-none rounded-full border border-gray-300 px-4 py-2 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            }`}
+            style={{
+              minHeight: '40px',
+              maxHeight: '120px',
+              overflowY: 'auto'
+            }}
+          />
+
+          {/* Emoji Button */}
+          <button
+            type="button"
+            disabled={disabled}
+            className={`absolute right-3 bottom-2 p-1 rounded-full transition-colors ${
+              disabled 
+                ? 'text-gray-400 cursor-not-allowed' 
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            }`}
+            title="Add emoji"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Send Button */}
+        <button
+          type="submit"
+          disabled={disabled || !message.trim()}
+          className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+            disabled || !message.trim()
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+          }`}
+          title="Send message"
+        >
+          {disabled ? (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          )}
+        </button>
+      </form>
+
+      {/* Typing Indicator */}
+      {isTyping && (
+        <div className="mt-2 text-xs text-gray-500 px-4">
+          <span className="italic">Typing...</span>
+        </div>
+      )}
+
+      {/* Message Hints */}
+      <div className="mt-2 text-xs text-gray-400 px-4">
+        <span>Press Enter to send, Shift+Enter for new line</span>
+      </div>
     </div>
   );
 };

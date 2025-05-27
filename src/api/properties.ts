@@ -114,10 +114,34 @@ export const uploadPropertyImages = async (token: string, propertyId: number, fi
   return response.data;
 };
 
+
 export const updatePropertyStatus = async (token: string, propertyId: number, status: string) => {
-  const propertyApi = createPropertyApi(token);
-  const response = await propertyApi.put(`/${propertyId}/status?status=${status}`, {});
-  return response.data;
+  try {
+    console.log(`Updating property ${propertyId} status to: ${status}`);
+    
+    const response = await axios.put(
+      `${API_BASE_URL}/properties/${propertyId}/status?status=${encodeURIComponent(status)}`,
+      {}, // Empty body since we're using query parameters
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    console.log('Property status updated successfully:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error updating property status:', error);
+    
+    if (error.response) {
+      console.error('Error response:', error.response.data);
+      console.error('Error status:', error.response.status);
+    }
+    
+    throw error;
+  }
 };
 
 export const addToFavorites = async (token: string, propertyId: number) => {
