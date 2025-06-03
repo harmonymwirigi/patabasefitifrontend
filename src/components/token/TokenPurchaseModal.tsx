@@ -1,22 +1,20 @@
 // File: frontend/src/components/token/TokenPurchaseModal.tsx
-// Status: COMPLETE
-// Dependencies: react, api/tokens, formik, yup
+// Updated to redirect to checkout page instead of old purchase flow
 
 import React, { useState, useEffect } from 'react';
-import { Formik, Form, Field, ErrorMessage } from 'formik';
-import * as Yup from 'yup';
-import { getTokenPackages, purchaseTokens } from '../../api/tokens';
+import { useNavigate } from 'react-router-dom';
+import { getTokenPackages } from '../../api/tokens';
 import { useAuth } from '../../hooks/useAuth';
-import { Modal } from '../common/Modal';
-import { Alert } from '../common/Alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { Coins, ArrowRight } from 'lucide-react';
 
-// Validation schema
-const PurchaseSchema = Yup.object().shape({
-  package_id: Yup.number().required('Please select a token package'),
-  phone_number: Yup.string()
-    .matches(/^(\+254|0)[17]\d{8}$/, 'Please enter a valid Kenyan phone number')
-    .required('Phone number is required'),
-});
+interface TokenPurchaseModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialPackageId?: number | null;
+}
 
 interface TokenPackage {
   id: number;
@@ -24,88 +22,60 @@ interface TokenPackage {
   token_count: number;
   price: number;
   currency: string;
-  description?: string;
-}
-
-interface TokenPurchaseModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess?: () => void;
+  description: string;
+  features: string[];
+  is_active: boolean;
 }
 
 const TokenPurchaseModal: React.FC<TokenPurchaseModalProps> = ({
   isOpen,
   onClose,
-  onSuccess,
+  initialPackageId = null,
 }) => {
-  const { token, user, updateUser } = useAuth();
+  const { token } = useAuth();
+  const navigate = useNavigate();
   const [packages, setPackages] = useState<TokenPackage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  
+  const [loading, setLoading] = useState(true);
+  const [selectedPackageId, setSelectedPackageId] = useState<number | null>(initialPackageId);
+
   useEffect(() => {
-    // Reset state on open
-    if (isOpen) {
-      setError(null);
-      setSuccess(null);
+    if (isOpen && token) {
       fetchPackages();
     }
-  }, [isOpen]);
+  }, [isOpen, token]);
+
+  useEffect(() => {
+    if (initialPackageId) {
+      setSelectedPackageId(initialPackageId);
+    }
+  }, [initialPackageId]);
 
   const fetchPackages = async () => {
-    setLoading(true);
-    
-    try {
-      const data = await getTokenPackages();
-      setPackages(data);
-    } catch (err) {
-      console.error('Error fetching token packages:', err);
-      setError('Failed to load token packages. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (values: { package_id: number; phone_number: string }) => {
     if (!token) return;
-    
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
-    
+
     try {
-      const result = await purchaseTokens(token, values.package_id, values.phone_number);
-      
-      setSuccess(
-        'Payment request sent successfully! Please check your phone to complete the M-Pesa payment.'
-      );
-      
-      // Update user token balance if available in response
-      if (result.new_balance !== undefined && user) {
-        updateUser({ token_balance: result.new_balance });
-      }
-      
-      if (onSuccess) {
-        setTimeout(() => {
-          onSuccess();
-          onClose();
-        }, 3000);
-      }
-    } catch (err: any) {
-      console.error('Token purchase error:', err);
-      
-      if (err.response && err.response.data && err.response.data.detail) {
-        setError(err.response.data.detail);
-      } else {
-        setError('Failed to process payment. Please try again later.');
-      }
+      setLoading(true);
+      const data = await getTokenPackages(token);
+      setPackages(data.filter((pkg: TokenPackage) => pkg.is_active));
+    } catch (error) {
+      console.error('Error fetching packages:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Format currency
+  const handleProceedToCheckout = () => {
+    if (selectedPackageId) {
+      onClose();
+      navigate(`/tokens/checkout/${selectedPackageId}`);
+    }
+  };
+
+  const handleGoToTokens = () => {
+    onClose();
+    navigate('/tokens');
+  };
+
   const formatPrice = (amount: number, currency: string = 'KES') => {
     return new Intl.NumberFormat('en-KE', {
       style: 'currency',
@@ -114,97 +84,89 @@ const TokenPurchaseModal: React.FC<TokenPurchaseModalProps> = ({
     }).format(amount);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Purchase Tokens">
-      <div className="p-4">
-        {error && <Alert type="error" message={error} className="mb-4" />}
-        {success && <Alert type="success" message={success} className="mb-4" />}
-        
-        {loading && !packages.length ? (
-          <div className="py-8 text-center">
-            <svg className="animate-spin mx-auto h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <p className="mt-2 text-gray-600">Loading packages...</p>
-          </div>
-        ) : (
-          <Formik
-            initialValues={{
-              package_id: 0,
-              phone_number: user?.phone_number || '',
-            }}
-            validationSchema={PurchaseSchema}
-            onSubmit={handleSubmit}
-          >
-            {({ isSubmitting }) => (
-              <Form className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Token Package
-                  </label>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {packages.map((pkg) => (
-                      <label
-                        key={pkg.id}
-                        className="relative border rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                      >
-                        <Field
-                          type="radio"
-                          name="package_id"
-                          value={pkg.id}
-                          className="absolute h-4 w-4 top-4 right-4"
-                        />
-                        <div className="pr-6">
-                          <h3 className="font-medium text-gray-900">{pkg.name}</h3>
-                          <p className="mt-1 text-sm text-gray-500">{pkg.description}</p>
-                          <div className="mt-2 flex justify-between items-center">
-                            <span className="text-blue-600 font-bold">
-                              {pkg.token_count} Tokens
-                            </span>
-                            <span className="text-gray-900">
-                              {formatPrice(pkg.price, pkg.currency)}
-                            </span>
-                          </div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                  <ErrorMessage name="package_id" component="div" className="mt-1 text-sm text-red-600" />
-                </div>
-                
-                <div>
-                  <label htmlFor="phone_number" className="block text-sm font-medium text-gray-700 mb-1">
-                    M-Pesa Phone Number
-                  </label>
-                  <Field
-                    id="phone_number"
-                    name="phone_number"
-                    type="text"
-                    placeholder="07XXXXXXXX"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Enter the phone number that will receive the M-Pesa payment request
-                  </p>
-                  <ErrorMessage name="phone_number" component="div" className="mt-1 text-sm text-red-600" />
-                </div>
-                
-                <div className="pt-4">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || loading}
-                    className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-center text-xl">Purchase Tokens</DialogTitle>
+        </DialogHeader>
+
+        <div className="py-4">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-6 text-center">
+                <p className="text-gray-600">
+                  Select a token package to continue with secure M-Pesa payment
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {packages.map((pkg) => (
+                  <Card
+                    key={pkg.id}
+                    className={`cursor-pointer transition-all duration-200 ${
+                      selectedPackageId === pkg.id
+                        ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50'
+                        : 'hover:border-blue-300 hover:shadow-md'
+                    }`}
+                    onClick={() => setSelectedPackageId(pkg.id)}
                   >
-                    {isSubmitting || loading ? 'Processing...' : 'Pay with M-Pesa'}
-                  </button>
-                </div>
-              </Form>
-            )}
-          </Formik>
-        )}
-      </div>
-    </Modal>
+                    <CardContent className="p-4">
+                      <div className="text-center">
+                        <div className="flex items-center justify-center mb-2">
+                          <Coins className="h-6 w-6 text-blue-600 mr-1" />
+                          <span className="text-2xl font-bold text-gray-900">
+                            {pkg.token_count}
+                          </span>
+                        </div>
+                        <h3 className="font-semibold text-gray-900 mb-1">{pkg.name}</h3>
+                        <p className="text-xl font-bold text-blue-600">
+                          {formatPrice(pkg.price, pkg.currency)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {(pkg.price / pkg.token_count).toFixed(2)} per token
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="flex justify-between space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={handleGoToTokens}
+                  className="flex-1"
+                >
+                  View All Packages
+                </Button>
+                
+                <Button
+                  onClick={handleProceedToCheckout}
+                  disabled={!selectedPackageId}
+                  className="flex-1"
+                >
+                  <span>Proceed to Checkout</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+
+              <div className="mt-4 text-center">
+                <p className="text-xs text-gray-500">
+                  Secure payment with M-Pesa • No hidden fees • Instant token delivery
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 

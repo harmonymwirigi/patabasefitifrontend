@@ -1,8 +1,8 @@
 // File: frontend/src/config/constants.ts
-// Updated with correct environment variables
+// Fixed API configuration - removed duplicate /api/v1
 
-// API configuration
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+// API configuration - DO NOT include /api/v1 here since it's added in the API files
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // Google OAuth client ID
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '252866098116-jhp7iuhnodp5c3jtsf89g7en80oonu5a.apps.googleusercontent.com';
