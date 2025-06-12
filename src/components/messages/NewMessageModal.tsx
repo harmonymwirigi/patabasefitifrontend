@@ -1,5 +1,5 @@
 // frontend/src/components/messages/NewMessageModal.tsx
-// Modal for starting new conversations
+// Fixed modal with proper owner_id handling and debugging
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { searchUsers } from '../../api/users';
@@ -19,12 +19,17 @@ interface Property {
   address: string;
   city: string;
   owner_id: number;
+  owner?: {
+    id: number;
+    full_name: string;
+    email: string;
+  };
 }
 
 interface NewMessageModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateConversation: (receiverId: number, propertyId?: number) => void;
+  onCreateConversation: (receiverId: number, propertyId?: number, initialMessage?: string) => void;
 }
 
 const NewMessageModal: React.FC<NewMessageModalProps> = ({
@@ -39,10 +44,12 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialMessage, setInitialMessage] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setSearchQuery('');
+      setInitialMessage('');
       setError(null);
       if (activeTab === 'properties') {
         fetchProperties();
@@ -51,28 +58,27 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
   }, [isOpen, activeTab]);
 
   useEffect(() => {
-    if (searchQuery && activeTab === 'users') {
+    if (searchQuery && searchQuery.length >= 2 && activeTab === 'users') {
       const debounceTimer = setTimeout(() => {
         searchUsersHandler();
       }, 300);
       
       return () => clearTimeout(debounceTimer);
-    } else if (!searchQuery) {
+    } else if (searchQuery.length < 2) {
       setUsers([]);
     }
   }, [searchQuery, activeTab]);
 
   const searchUsersHandler = async () => {
-    if (!token || !searchQuery.trim()) return;
+    if (!token || !searchQuery.trim() || searchQuery.length < 2) return;
 
     setLoading(true);
     setError(null);
 
     try {
       const data = await searchUsers(token, searchQuery);
-      // Filter out current user
-      const filteredUsers = data.filter((u: User) => u.id !== user?.id);
-      setUsers(filteredUsers);
+      console.log('Search users result:', data);
+      setUsers(data);
     } catch (err: any) {
       console.error('Error searching users:', err);
       setError('Failed to search users');
@@ -89,10 +95,27 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
     setError(null);
 
     try {
-      // Get recent properties (you might want to get featured or available properties)
+      // Get recent properties with proper parameters
       const data = await getAllProperties(token, { limit: 20 });
-      // Filter out current user's properties
-      const filteredProperties = data.filter((p: Property) => p.owner_id !== user?.id);
+      
+      // DEBUG: Log the properties data to see what we're getting
+      console.log('Raw properties data:', data);
+      console.log('First property:', data[0]);
+      
+      // Filter out current user's properties and ensure we have valid owner_id
+      const filteredProperties = data.filter((p: Property) => {
+        // Check if property has owner_id or owner.id
+        const ownerId = p.owner_id || p.owner?.id;
+        console.log(`Property ${p.id}: owner_id=${p.owner_id}, owner=${JSON.stringify(p.owner)}, calculated ownerId=${ownerId}`);
+        
+        return ownerId && ownerId !== user?.id;
+      }).map((p: Property) => ({
+        ...p,
+        // Ensure owner_id is set correctly
+        owner_id: p.owner_id || p.owner?.id || 0
+      }));
+      
+      console.log('Filtered properties:', filteredProperties);
       setProperties(filteredProperties);
     } catch (err: any) {
       console.error('Error fetching properties:', err);
@@ -104,11 +127,39 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
   };
 
   const handleUserSelect = (selectedUser: User) => {
-    onCreateConversation(selectedUser.id);
+    console.log('Selected user:', selectedUser);
+    
+    if (!selectedUser.id || selectedUser.id <= 0) {
+      alert('Invalid user selected');
+      return;
+    }
+
+    const message = initialMessage.trim();
+    onCreateConversation(selectedUser.id, undefined, message || undefined);
   };
 
   const handlePropertySelect = (property: Property) => {
-    onCreateConversation(property.owner_id, property.id);
+    console.log('Selected property:', property);
+    console.log('Property owner_id:', property.owner_id);
+    
+    // Get the owner ID from either owner_id field or owner object
+    const ownerId = property.owner_id || property.owner?.id;
+    
+    if (!ownerId || ownerId <= 0) {
+      console.error('Invalid owner ID for property:', property);
+      alert('Cannot contact property owner - invalid owner information');
+      return;
+    }
+
+    if (ownerId === user?.id) {
+      alert('This is your own property');
+      return;
+    }
+
+    const message = initialMessage.trim() || `Hi, I'm interested in your property: ${property.title}`;
+    console.log('Creating conversation with owner_id:', ownerId, 'property_id:', property.id, 'message:', message);
+    
+    onCreateConversation(ownerId, property.id, message);
   };
 
   if (!isOpen) return null;
@@ -167,18 +218,35 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
               <div className="mb-4">
                 <input
                   type="text"
-                  placeholder="Search users by name or email..."
+                  placeholder="Search users by name or email (min 2 characters)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                {searchQuery.length > 0 && searchQuery.length < 2 && (
+                  <p className="text-xs text-gray-500 mt-1">Please enter at least 2 characters</p>
+                )}
               </div>
             )}
+
+            {/* Initial Message Input */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Initial Message (Optional)
+              </label>
+              <textarea
+                value={initialMessage}
+                onChange={(e) => setInitialMessage(e.target.value)}
+                placeholder="Type your message here..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
             {/* Content */}
             <div className="max-h-96 overflow-y-auto">
               {error && (
-                <div className="text-center py-4 text-red-600">
+                <div className="text-center py-4 text-red-600 bg-red-50 rounded-md mb-4">
                   {error}
                 </div>
               )}
@@ -186,19 +254,20 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
               {loading && (
                 <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+                  <p className="text-gray-500 mt-2">Loading...</p>
                 </div>
               )}
 
               {/* Users Tab */}
               {activeTab === 'users' && !loading && (
                 <div className="space-y-2">
-                  {users.length === 0 && searchQuery ? (
+                  {users.length === 0 && searchQuery.length >= 2 ? (
                     <div className="text-center py-8 text-gray-500">
                       No users found for "{searchQuery}"
                     </div>
-                  ) : users.length === 0 && !searchQuery ? (
+                  ) : users.length === 0 && searchQuery.length < 2 ? (
                     <div className="text-center py-8 text-gray-500">
-                      Type to search for users...
+                      Type at least 2 characters to search for users...
                     </div>
                   ) : (
                     users.map((user) => (
@@ -254,7 +323,7 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
                 <div className="space-y-2">
                   {properties.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
-                      No properties available
+                      No properties available to contact
                     </div>
                   ) : (
                     properties.map((property) => (
@@ -281,7 +350,7 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({
                             {property.address}, {property.city}
                           </div>
                           <div className="text-xs text-gray-400">
-                            Contact Property Owner
+                            Contact Property Owner (ID: {property.owner_id || property.owner?.id || 'Unknown'})
                           </div>
                         </div>
 

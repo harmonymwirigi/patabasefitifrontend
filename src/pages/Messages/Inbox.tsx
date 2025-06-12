@@ -1,5 +1,5 @@
 // frontend/src/pages/Messages/Inbox.tsx
-// Main inbox page showing conversation list and message interface
+// Enhanced inbox with success notifications and better UX
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -30,6 +30,52 @@ interface Conversation {
   updated_at: string;
 }
 
+// Success/Error notification component
+const Notification: React.FC<{
+  type: 'success' | 'error';
+  message: string;
+  onClose: () => void;
+}> = ({ type, message, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000); // Auto-close after 5 seconds
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className={`fixed top-4 right-4 z-50 max-w-md p-4 rounded-lg shadow-lg ${
+      type === 'success' 
+        ? 'bg-green-100 border border-green-400 text-green-700' 
+        : 'bg-red-100 border border-red-400 text-red-700'
+    }`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          {type === 'success' ? (
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          )}
+          <span className="font-medium">{message}</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="ml-4 text-gray-400 hover:text-gray-600"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const Inbox: React.FC = () => {
   const { token, user } = useAuth();
   const navigate = useNavigate();
@@ -39,6 +85,10 @@ const Inbox: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewMessage, setShowNewMessage] = useState(false);
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -46,9 +96,18 @@ const Inbox: React.FC = () => {
     }
   }, [token]);
 
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+  };
+
+  const hideNotification = () => {
+    setNotification(null);
+  };
+
   const fetchConversations = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await getConversations(token!);
       setConversations(data);
       
@@ -73,15 +132,77 @@ const Inbox: React.FC = () => {
     }
   };
 
-  const handleNewConversation = async (receiverId: number, propertyId?: number) => {
+  const handleNewConversation = async (
+    receiverId: number, 
+    propertyId?: number, 
+    initialMessage?: string
+  ) => {
     try {
-      const conversation = await createConversation(token!, receiverId, propertyId);
+      console.log('handleNewConversation called with:', { receiverId, propertyId, initialMessage });
+      
+      // Comprehensive validation
+      if (!receiverId) {
+        throw new Error('Receiver ID is required');
+      }
+
+      if (typeof receiverId !== 'number') {
+        throw new Error('Receiver ID must be a number');
+      }
+
+      if (receiverId <= 0) {
+        throw new Error('Invalid receiver ID - must be positive');
+      }
+
+      if (receiverId === user?.id) {
+        throw new Error('Cannot send message to yourself');
+      }
+
+      if (propertyId !== undefined && propertyId <= 0) {
+        throw new Error('Invalid property ID');
+      }
+
+      console.log('Validation passed, creating conversation...');
+
+      const conversation = await createConversation(
+        token!, 
+        receiverId, 
+        propertyId, 
+        initialMessage
+      );
+
+      console.log('Conversation created successfully:', conversation);
+
+      // Show success notification
+      const participantName = conversation.participants.find(p => p.id !== user?.id)?.full_name || 'User';
+      
+      if (initialMessage) {
+        showNotification('success', `Message sent to ${participantName} successfully!`);
+      } else {
+        showNotification('success', `Conversation started with ${participantName}!`);
+      }
+
+      // Refresh conversations
       await fetchConversations();
+      
+      // Select the new conversation
       setSelectedConversation(conversation.id);
       setShowNewMessage(false);
+
     } catch (err: any) {
       console.error('Error creating conversation:', err);
-      alert('Failed to start conversation. Please try again.');
+      
+      // Show specific error message
+      let errorMessage = 'Failed to start conversation';
+      
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      }
+      
+      showNotification('error', errorMessage);
     }
   };
 
@@ -97,6 +218,15 @@ const Inbox: React.FC = () => {
 
   return (
     <div className="h-screen flex bg-gray-50">
+      {/* Notification */}
+      {notification && (
+        <Notification
+          type={notification.type}
+          message={notification.message}
+          onClose={hideNotification}
+        />
+      )}
+
       {/* Sidebar - Conversation List */}
       <div className={`bg-white border-r border-gray-200 ${
         selectedConversation ? 'hidden md:block' : 'block'
